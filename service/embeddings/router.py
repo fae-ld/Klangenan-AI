@@ -1,6 +1,9 @@
 from pydantic import BaseModel,Field
 from typing import LIst,Optional
 
+# ---------------------------------------------------------------------------
+# Product Embedding
+# ---------------------------------------------------------------------------   
 
 class ProductEmbedRequest(BaseModel):
     """
@@ -49,4 +52,28 @@ class ProductEmbedResponse(BaseModel):
     model : str = Field(
         ...,
         description="Nama model yang digunakan."
+    )
+    
+    
+# ---------------------------------------------------------------------------
+# Similarity
+# ---------------------------------------------------------------------------
+
+class SimilarityRequest(BaseModel):
+    """
+    Hitung cosine similarity antara 2 produk.
+    berguna untuk cek seberapa mirip 2 produk sebelum menyimpan ke DB.
+    """
+    
+    product_a: ProductEmbedRequest
+    product_b: ProductEmbedRequest
+    
+class SimilarityResponse(BaseModel):
+    score: float = Field(
+        ...,
+        description="Cosine similarity score antara -1 dan 1. Semakin dekat ke 1, semakin mirip."
+    )
+    interpretation: str = Field(
+        ...,
+        description="Interpretasi human-readable dari score."
     )
