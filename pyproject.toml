@@ -9,6 +9,12 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "sentence-transformers>=3.0.0",
     "pydantic>=2.0.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg",
+    "pgvector",
+    "pydantic-settings",
+    "sqlalchemy",
+    "psycopg2>=2.9.11"
 ]
 
 [project.optional-dependencies]

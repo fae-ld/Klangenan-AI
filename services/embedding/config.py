@@ -11,6 +11,9 @@ Contoh .env:
 from functools import lru_cache
  
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
+
+root = Path(__file__).parent.parent.parent
  
  
 class Settings(BaseSettings):
@@ -40,9 +43,10 @@ class Settings(BaseSettings):
     ]
  
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=root / ".env",  # Mundur 2 kali untuk ke root directory
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore" # Tambahan opsional agar tidak error jika ada key lain di .env kamu
     )
  
  

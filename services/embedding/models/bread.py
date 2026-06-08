@@ -19,8 +19,8 @@ from datetime import datetime
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqalchemy import Boolean, DateTime, Float, Integer, String, Text, func
-from sqalchemy.orm import Mapped,mapped_column
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
+from sqlalchemy.orm import Mapped,mapped_column
 
 from ..database.base import Base
 

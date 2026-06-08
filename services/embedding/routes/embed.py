@@ -17,7 +17,6 @@ from ..repositories.bread_repository import BreadRepository
  
 router = APIRouter(prefix="/embed", tags=["Embedding"])
  
- 
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------

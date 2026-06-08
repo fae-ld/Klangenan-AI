@@ -9,7 +9,7 @@ ke semua request via dependency injection (get_db).
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool
 
 from ..config import settings
 
