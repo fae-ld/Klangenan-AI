@@ -9,7 +9,7 @@ AI microservice untuk **Klangenan Roti Shop** yang menangani embedding produk da
 | Layer | Teknologi |
 |---|---|
 | Framework | FastAPI (Python) |
-| Embedding Model | `sentence-transformers` (paraphrase-multilingual-MiniLM-L12-v2) |
+| Embedding Model | `sentence-transformers` (all-MiniLM-L6-v2) |
 | Database | PostgreSQL + pgvector (Supabase) |
 | ORM | SQLAlchemy (async) |
 | Driver | asyncpg |
@@ -86,7 +86,7 @@ POST /api/v1/embed/bread
   "saved": true,
   "text_input": "nama: Roti Coklat Keju | kategori: Manis | deskripsi: ...",
   "dimension": 384,
-  "model": "paraphrase-multilingual-MiniLM-L12-v2"
+  "model": "all-MiniLM-L6-v2"
 }
 ```
 
