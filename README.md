@@ -1,142 +1,293 @@
-# Klangenan AI 🎯
+# 🥖 Klangenan AI — Microservice
 
-Microservice AI berbasis **FastAPI** + **sentence-transformers**.
-
-## Struktur Proyek
-
-```
-KLANGENAN-AI/
-├── main.py
-├── pyproject.toml
-├── services/
-│   └── embedding/
-│       ├── model.py       ← EmbeddingModel: build_product_text, encode_single, cosine_similarity
-│       ├── router.py      ← Endpoints: /product, /similarity, /info
-│       └── schemas.py     ← Pydantic: ProductEmbedRequest, SimilarityRequest, dst
-```
-
-## Setup
-
-```bash
-pip install -e .
-uvicorn main:app --reload
-```
-
-## Endpoints
-
-| Method | Path | Deskripsi |
-|--------|------|-----------|
-| GET | `/` | Health check |
-| POST | `/api/v1/embedding/product` | Embed 1 produk → 1 vector |
-| POST | `/api/v1/embedding/similarity` | Cosine similarity 2 produk |
-| GET | `/api/v1/embedding/info` | Info model aktif |
+AI microservice untuk **Klangenan Roti Shop** yang menangani embedding produk dan rekomendasi berbasis semantic similarity menggunakan `sentence-transformers` dan `pgvector`.
 
 ---
 
-## Contoh: Embed Produk Baru
+## Tech Stack
 
-```bash
-POST /api/v1/embedding/product
+| Layer | Teknologi |
+|---|---|
+| Framework | FastAPI (Python) |
+| Embedding Model | `sentence-transformers` (paraphrase-multilingual-MiniLM-L12-v2) |
+| Database | PostgreSQL + pgvector (Supabase) |
+| ORM | SQLAlchemy (async) |
+| Driver | asyncpg |
+| Package Manager | uv |
+
+---
+
+## Struktur Project
+
+```
+klangenan-AI/
+├── main.py                          # Entry point FastAPI
+├── .env                             # Environment variables (tidak di-commit)
+├── .env.example                     # Template environment variables
+├── pyproject.toml                   # Dependencies (dikelola uv)
+│
+└── services/
+    └── embedding/
+        ├── config.py                # Settings via pydantic-settings
+        ├── model.py                 # EmbeddingModel (sentence-transformers)
+        │
+        ├── database/
+        │   ├── base.py              # DeclarativeBase SQLAlchemy
+        │   ├── connection.py        # Engine + AsyncSession + get_db dependency
+        │   └── migrations.sql       # SQL setup pgvector (jalankan sekali)
+        │
+        ├── models/
+        │   └── bread.py             # ORM model tabel breads + kolom embedding
+        │
+        ├── repositories/
+        │   └── bread_repository.py  # Semua query DB (CRUD + similarity search)
+        │
+        └── routes/
+            ├── embed.py             # POST /embed/bread, POST /embed/bread/batch
+            └── recommend.py         # POST /recommend
+```
+
+---
+
+## Endpoints
+
+### Health Check
+```
+GET /
+```
+```json
+{ "status": "ok", "message": "Klangenan AI is running 🎯" }
+```
+
+---
+
+### Embedding
+
+#### Embed Satu Roti
+```
+POST /api/v1/embed/bread
+```
+
+**Request:**
+```json
 {
-  "name": "Roti Coklat Lembut",
-  "category": "Roti Manis",
-  "description": "Roti lembut dengan isian coklat premium."
+  "bread_id": 1,
+  "name": "Roti Coklat Keju",
+  "category": "Manis",
+  "description": "Roti lembut dengan isian coklat dan keju mozzarella",
+  "normalize": true
 }
 ```
 
-Response:
+**Response:**
 ```json
 {
-  "embedding": [0.12, -0.34, ...],   // 384 angka
-  "text_input": "nama: Roti Coklat Lembut | kategori: Roti Manis | deskripsi: ...",
+  "bread_id": 1,
+  "saved": true,
+  "text_input": "nama: Roti Coklat Keju | kategori: Manis | deskripsi: ...",
   "dimension": 384,
   "model": "paraphrase-multilingual-MiniLM-L12-v2"
 }
 ```
 
+> Dipanggil saat admin **CREATE** atau **UPDATE** nama/kategori/deskripsi roti.
+> Tidak perlu dipanggil saat update harga, stok, gambar, atau URL marketplace.
+
 ---
 
-## Contoh: Cek Kemiripan 2 Produk
+#### Bulk Embed (Batch)
+```
+POST /api/v1/embed/bread/batch
+```
+
+Embed semua roti yang belum punya embedding. Berguna saat:
+- Pertama kali setup (data sudah ada di DB tapi belum di-embed)
+- Ganti model ke versi baru
+
+**Response:**
+```json
+{
+  "message": "Berhasil embed 12 dari 12 roti",
+  "processed": 12,
+  "failed": []
+}
+```
+
+---
+
+### Rekomendasi
+
+```
+POST /api/v1/recommend/
+```
+
+**Request:**
+```json
+{
+  "bread_id": 1,
+  "top_k": 5,
+  "min_similarity": 0.5,
+  "category_filter": null,
+  "exclude_ids": []
+}
+```
+
+**Response:**
+```json
+{
+  "source_bread_id": 1,
+  "recommendations": [
+    {
+      "id": 3,
+      "name": "Roti Coklat Almond",
+      "category": "Manis",
+      "price": 15000,
+      "image_url": "https://res.cloudinary.com/...",
+      "gojek_url": "https://gofood.co.id/...",
+      "grab_url": null,
+      "shopee_food_url": null,
+      "similarity_score": 0.9123
+    }
+  ],
+  "total": 1
+}
+```
+
+> `similarity_score` berkisar antara `0.0` (tidak mirip) hingga `1.0` (identik).
+> Gunakan `min_similarity: 0.0` untuk mendapatkan semua hasil tanpa threshold.
+
+---
+
+## Inisialisasi
+
+### 1. Clone & Install Dependencies
 
 ```bash
-POST /api/v1/embedding/similarity
-{
-  "product_a": { "name": "Roti Coklat", "category": "Roti Manis" },
-  "product_b": { "name": "Roti Keju",   "category": "Roti Manis" }
-}
+# Clone project
+git clone <repo-url>
+cd klangenan-AI
+
+# Install dependencies via uv
+uv sync
 ```
 
-Response:
-```json
-{ "score": 0.8712, "interpretation": "Mirip" }
+### 2. Setup Environment Variables
+
+```bash
+# Copy template
+cp .env.example .env
 ```
 
----
+Edit `.env`:
+```env
+# Driver WAJIB asyncpg (bukan psycopg2)
+DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:5432/DBNAME
 
-## Integrasi pgvector (Prisma)
+DB_ECHO=false
+DEBUG=false
+APP_NAME=Klangenan AI Microservice
+ALLOWED_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
+```
 
-### 1. Schema Prisma
+> Untuk Supabase, format URL-nya:
+> `postgresql+asyncpg://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres`
+
+### 3. Setup Database
+
+Pastikan tabel `breads` sudah dibuat oleh Prisma migration dari Next.js terlebih dahulu, lalu jalankan:
+
+```bash
+# Tambah kolom embedding + HNSW index di PostgreSQL
+psql "postgresql://USER:PASSWORD@HOST:5432/DBNAME" -c "CREATE EXTENSION IF NOT EXISTS vector" -c "ALTER TABLE breads ADD COLUMN IF NOT EXISTS embedding vector(384)" -c "CREATE INDEX IF NOT EXISTS breads_embedding_hnsw_idx ON breads USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)"
+```
+
+Atau gunakan file SQL (pastikan terminal encoding UTF-8):
+```bash
+psql "CONNECTION_STRING" -f services/embedding/database/migrations.sql
+```
+
+### 4. Tambah Kolom Embedding di Prisma Schema
+
+Agar kolom `embedding` tidak terhapus saat `prisma migrate`:
 
 ```prisma
-// Tambah field embedding di model produk
-model Product {
-  id          String   @id @default(cuid())
-  name        String
-  category    String
-  description String?
-  embedding   Unsupported("vector(384)")?  // pgvector
+model Bread {
+  // ... kolom lainnya
+  embedding Unsupported("vector(384)")?
 
-  @@index([embedding], type: Hnsw(m: 16, efConstruction: 64), opclass: vector_cosine_ops)
+  @@map("breads")
 }
 ```
 
-### 2. Simpan vector saat CREATE/UPDATE
+### 5. Jalankan Server
 
-```typescript
-// Di service/controller produk kamu
-async function upsertProduct(data: ProductInput) {
-  // 1. Embed via microservice
-  const res = await fetch("http://localhost:8000/api/v1/embedding/product", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  const { embedding } = await res.json();
+```bash
+# Aktifkan virtual environment dulu
+.venv\Scripts\Activate.ps1          # Windows PowerShell
+source .venv/bin/activate            # Linux/macOS
 
-  // 2. Simpan ke DB
-  await prisma.$executeRaw`
-    INSERT INTO "Product" (id, name, category, description, embedding)
-    VALUES (${cuid()}, ${data.name}, ${data.category}, ${data.description},
-            ${JSON.stringify(embedding)}::vector)
-    ON CONFLICT (id) DO UPDATE
-      SET embedding = EXCLUDED.embedding;
-  `;
-}
+# Jalankan dari root project
+python -m uvicorn main:app --reload --port 8000
 ```
 
-### 3. Query rekomendasi (cosine similarity)
+Server berjalan di `http://localhost:8000`
+Swagger UI tersedia di `http://localhost:8000/docs`
 
-```typescript
-async function getRecommendations(productId: string, limit = 10) {
-  // Ambil embedding produk yang sedang dilihat
-  const product = await prisma.product.findUnique({ where: { id: productId } });
+### 6. Embed Semua Roti (Pertama Kali)
 
-  // Cari N produk terdekat via pgvector
-  const similar = await prisma.$queryRaw`
-    SELECT id, name, category,
-           1 - (embedding <=> ${product.embedding}::vector) AS similarity
-    FROM "Product"
-    WHERE id != ${productId}
-    ORDER BY embedding <=> ${product.embedding}::vector
-    LIMIT ${limit};
-  `;
+Setelah server berjalan, hit endpoint batch untuk embed semua roti yang ada di DB:
 
-  return similar;
-}
+```bash
+curl -X POST http://localhost:8000/api/v1/embed/bread/batch
 ```
 
 ---
 
-## Docs Interaktif
+## Integrasi dengan Next.js
 
-Buka **http://localhost:8000/docs** setelah server jalan.
+Tambahkan di `.env` Next.js:
+```env
+AI_SERVICE_URL=http://localhost:8000/api/v1
+```
+
+Contoh pemanggilan dari Next.js Route Handler:
+```typescript
+// Embed roti baru setelah INSERT ke DB
+await fetch(`${process.env.AI_SERVICE_URL}/embed/bread`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    bread_id: newBread.id,
+    name: newBread.name,
+    category: newBread.category,
+    description: newBread.description ?? "",
+  }),
+});
+
+// Ambil rekomendasi di halaman detail roti
+const res = await fetch(`${process.env.AI_SERVICE_URL}/recommend/`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ bread_id: id, top_k: 4 }),
+  next: { revalidate: 300 }, // cache 5 menit
+});
+```
+
+---
+
+## Kapan Re-embed Diperlukan?
+
+| Aksi | Perlu Re-embed? |
+|---|---|
+| Update nama / kategori / deskripsi | ✅ Ya |
+| Update harga / stok | ❌ Tidak |
+| Update gambar / URL marketplace | ❌ Tidak |
+| Ganti model sentence-transformers | ✅ Ya — jalankan `/embed/bread/batch` |
+
+---
+
+## Catatan
+
+- Microservice ini **tidak mengelola DDL** (CREATE TABLE, ALTER TABLE) — semua schema dikelola Prisma dari Next.js, kecuali kolom `embedding` yang ditambah manual via `migrations.sql`.
+- Model embedding di-load sekali saat startup dan di-share ke semua request via `app.state.embedding_model`.
+- pgvector menggunakan **HNSW index** untuk cosine similarity search yang efisien.
