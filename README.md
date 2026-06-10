@@ -43,6 +43,7 @@ klangenan-AI/
         │   ├──base.py               # abstraksi untuk LLM
         │   ├──gemini.py             # Penerapan untuk Gemini
         |   └──ollama.py             # penerapan untuk ollama
+        |  
         ├── models/
         │   └── bread.py             # ORM model tabel breads + kolom embedding
         │
