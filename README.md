@@ -38,6 +38,11 @@ klangenan-AI/
         │   ├── connection.py        # Engine + AsyncSession + get_db dependency
         │   └── migrations.sql       # SQL setup pgvector (jalankan sekali)
         │
+        ├── llm/
+        │   ├──factory.py            # mengambil llm (sesuai dengan env)
+        │   ├──base.py               # abstraksi untuk LLM
+        │   ├──gemini.py             # Penerapan untuk Gemini
+        |   └──ollama.py             # penerapan untuk ollama
         ├── models/
         │   └── bread.py             # ORM model tabel breads + kolom embedding
         │
