@@ -50,12 +50,6 @@ klangenan-AI/
         ├── repositories/
         │   └── bread_repository.py  # Semua query DB (CRUD + similarity search)
         │
-        ├── llm/
-        │   ├── base.py              # Abstract interface + system prompt builder
-        │   ├── gemini.py            # Implementasi Google Gemini Flash
-        │   ├── ollama.py            # Implementasi Ollama (local LLM)
-        │   └── factory.py           # Baca LLM_PROVIDER dari .env → return instance
-        │
         └── routes/
             ├── embed.py             # POST /embed/bread, POST /embed/bread/batch
             ├── recommend.py         # POST /recommend
