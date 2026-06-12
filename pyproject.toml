@@ -14,7 +14,7 @@ dependencies = [
     "pgvector",
     "pydantic-settings",
     "sqlalchemy",
-    "psycopg2>=2.9.11"
+    "psycopg2>=2.9.11",
 ]
 
 [project.optional-dependencies]
