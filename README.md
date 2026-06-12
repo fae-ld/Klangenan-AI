@@ -1,6 +1,6 @@
 # 🥖 Klangenan AI — Microservice
 
-AI microservice untuk **Klangenan Roti Shop** yang menangani embedding produk dan rekomendasi berbasis semantic similarity menggunakan `sentence-transformers` dan `pgvector`.
+AI microservice untuk **Klangenan Roti Shop** yang menangani embedding produk, rekomendasi berbasis semantic similarity, dan chatbot RAG menggunakan `sentence-transformers`, `pgvector`, dan LLM provider yang dapat diganti.
 
 ---
 
@@ -9,10 +9,12 @@ AI microservice untuk **Klangenan Roti Shop** yang menangani embedding produk da
 | Layer | Teknologi |
 |---|---|
 | Framework | FastAPI (Python) |
-| Embedding Model | `sentence-transformers` (all-MiniLM-L6-v2) |
+| Embedding Model | `sentence-transformers` (paraphrase-multilingual-MiniLM-L12-v2) |
 | Database | PostgreSQL + pgvector (Supabase) |
 | ORM | SQLAlchemy (async) |
 | Driver | asyncpg |
+| LLM Default | Google Gemini Flash |
+| LLM Alternatif | Ollama (lokal) |
 | Package Manager | uv |
 
 ---
@@ -36,6 +38,12 @@ klangenan-AI/
         │   ├── connection.py        # Engine + AsyncSession + get_db dependency
         │   └── migrations.sql       # SQL setup pgvector (jalankan sekali)
         │
+        ├── llm/
+        │   ├──factory.py            # mengambil llm (sesuai dengan env)
+        │   ├──base.py               # abstraksi untuk LLM
+        │   ├──gemini.py             # Penerapan untuk Gemini
+        |   └──ollama.py             # penerapan untuk ollama
+        |  
         ├── models/
         │   └── bread.py             # ORM model tabel breads + kolom embedding
         │
@@ -44,7 +52,8 @@ klangenan-AI/
         │
         └── routes/
             ├── embed.py             # POST /embed/bread, POST /embed/bread/batch
-            └── recommend.py         # POST /recommend
+            ├── recommend.py         # POST /recommend
+            └── chat.py              # POST /chat (RAG chatbot)
 ```
 
 ---
@@ -52,11 +61,17 @@ klangenan-AI/
 ## Endpoints
 
 ### Health Check
+
 ```
 GET /
 ```
+
 ```json
-{ "status": "ok", "message": "Klangenan AI is running 🎯" }
+{
+  "status": "ok",
+  "message": "Klangenan AI is running 🎯",
+  "llm_provider": "gemini"
+}
 ```
 
 ---
@@ -64,6 +79,7 @@ GET /
 ### Embedding
 
 #### Embed Satu Roti
+
 ```
 POST /api/v1/embed/bread
 ```
@@ -86,7 +102,7 @@ POST /api/v1/embed/bread
   "saved": true,
   "text_input": "nama: Roti Coklat Keju | kategori: Manis | deskripsi: ...",
   "dimension": 384,
-  "model": "all-MiniLM-L6-v2"
+  "model": "paraphrase-multilingual-MiniLM-L12-v2"
 }
 ```
 
@@ -96,13 +112,14 @@ POST /api/v1/embed/bread
 ---
 
 #### Bulk Embed (Batch)
+
 ```
 POST /api/v1/embed/bread/batch
 ```
 
 Embed semua roti yang belum punya embedding. Berguna saat:
 - Pertama kali setup (data sudah ada di DB tapi belum di-embed)
-- Ganti model ke versi baru
+- Ganti model sentence-transformers ke versi baru
 
 **Response:**
 ```json
@@ -158,52 +175,105 @@ POST /api/v1/recommend/
 
 ---
 
+### Chatbot (RAG)
+
+```
+POST /api/v1/chat/
+```
+
+Chatbot dengan RAG pipeline — pertanyaan user di-embed, roti yang relevan diambil dari pgvector, lalu dikirim sebagai konteks ke LLM.
+
+**Request:**
+```json
+{
+  "message": "ada yang rasa stroberi ga?",
+  "history": [
+    { "role": "user", "content": "halo, lagi buka?" },
+    { "role": "assistant", "content": "Halo! Selamat datang di Klangenan Roti Shop! Ada yang bisa saya bantu?" },
+    { "role": "user", "content": "mau cari roti buat sarapan nih" },
+    { "role": "assistant", "content": "Untuk sarapan kami punya banyak pilihan! Ada yang suka manis atau gurih?" },
+    { "role": "user", "content": "manis aja" },
+    { "role": "assistant", "content": "Untuk yang manis ada Roti Coklat Keju, Roti Krim Vanilla, dan beberapa pilihan lainnya!" }
+  ],
+  "top_k_context": 3,
+  "min_similarity": 0.3
+}
+```
+
+**Response:**
+```json
+{
+  "reply": "Untuk rasa stroberi, kami punya Roti Stroberi Krim seharga Rp 12.000! Tersedia di GoFood dan GrabFood. Mau langsung pesan?",
+  "context_used": ["Roti Stroberi Krim", "Roti Buah Segar", "Roti Selai Stroberi"]
+}
+```
+
+**Field penjelasan:**
+
+| Field | Keterangan |
+|---|---|
+| `message` | Pertanyaan user saat ini |
+| `history` | Riwayat percakapan — selalu bergantian `user → assistant` |
+| `top_k_context` | Jumlah roti yang diambil sebagai konteks RAG (default: 3) |
+| `min_similarity` | Threshold similarity untuk RAG — lebih rendah dari recommend agar konteks lebih luas (default: 0.3) |
+| `reply` | Jawaban dari LLM |
+| `context_used` | Nama roti yang dijadikan konteks — berguna untuk debugging |
+
+---
+
 ## Inisialisasi
 
 ### 1. Clone & Install Dependencies
 
 ```bash
-# Clone project
 git clone <repo-url>
 cd klangenan-AI
 
-# Install dependencies via uv
 uv sync
 ```
 
 ### 2. Setup Environment Variables
 
 ```bash
-# Copy template
 cp .env.example .env
 ```
 
 Edit `.env`:
 ```env
-# Driver WAJIB asyncpg (bukan psycopg2)
+# DATABASE — driver WAJIB asyncpg
 DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:5432/DBNAME
-
 DB_ECHO=false
+
+# APP
 DEBUG=false
 APP_NAME=Klangenan AI Microservice
 ALLOWED_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
+
+# LLM — pilih provider
+LLM_PROVIDER=gemini
+
+# Gemini (aktif kalau LLM_PROVIDER=gemini)
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Ollama (aktif kalau LLM_PROVIDER=ollama)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:7b
 ```
 
-> Untuk Supabase, format URL-nya:
+> Untuk Supabase, format DATABASE_URL:
 > `postgresql+asyncpg://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres`
+
+> Dapatkan Gemini API key gratis di: https://aistudio.google.com/app/apikey
 
 ### 3. Setup Database
 
 Pastikan tabel `breads` sudah dibuat oleh Prisma migration dari Next.js terlebih dahulu, lalu jalankan:
 
 ```bash
-# Tambah kolom embedding + HNSW index di PostgreSQL
-psql "postgresql://USER:PASSWORD@HOST:5432/DBNAME" -c "CREATE EXTENSION IF NOT EXISTS vector" -c "ALTER TABLE breads ADD COLUMN IF NOT EXISTS embedding vector(384)" -c "CREATE INDEX IF NOT EXISTS breads_embedding_hnsw_idx ON breads USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)"
-```
-
-Atau gunakan file SQL (pastikan terminal encoding UTF-8):
-```bash
-psql "CONNECTION_STRING" -f services/embedding/database/migrations.sql
+psql "postgresql://USER:PASSWORD@HOST:5432/DBNAME" \
+  -c "CREATE EXTENSION IF NOT EXISTS vector" \
+  -c "ALTER TABLE breads ADD COLUMN IF NOT EXISTS embedding vector(384)" \
+  -c "CREATE INDEX IF NOT EXISTS breads_embedding_hnsw_idx ON breads USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)"
 ```
 
 ### 4. Tambah Kolom Embedding di Prisma Schema
@@ -222,24 +292,45 @@ model Bread {
 ### 5. Jalankan Server
 
 ```bash
-# Aktifkan virtual environment dulu
-.venv\Scripts\Activate.ps1          # Windows PowerShell
-source .venv/bin/activate            # Linux/macOS
+# Aktifkan virtual environment
+.venv\Scripts\Activate.ps1     # Windows PowerShell
+source .venv/bin/activate       # Linux/macOS
 
 # Jalankan dari root project
 python -m uvicorn main:app --reload --port 8000
 ```
 
-Server berjalan di `http://localhost:8000`
+Server berjalan di `http://localhost:8000`  
 Swagger UI tersedia di `http://localhost:8000/docs`
 
 ### 6. Embed Semua Roti (Pertama Kali)
 
-Setelah server berjalan, hit endpoint batch untuk embed semua roti yang ada di DB:
-
 ```bash
 curl -X POST http://localhost:8000/api/v1/embed/bread/batch
 ```
+
+---
+
+## Ganti LLM Provider
+
+Untuk ganti model, cukup ubah **satu baris** di `.env` tanpa mengubah kode apapun:
+
+```env
+# Pakai Gemini Flash (cloud, gratis tier generous)
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_key
+
+# Pakai Ollama (lokal, fully gratis, butuh min 8GB RAM)
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=qwen2.5:7b
+```
+
+Provider yang tersedia:
+
+| Provider | Keterangan | Biaya |
+|---|---|---|
+| `gemini` | Google Gemini Flash via API | Gratis (rate limited) |
+| `ollama` | Local LLM via Ollama | Gratis (butuh GPU/RAM) |
 
 ---
 
@@ -250,7 +341,6 @@ Tambahkan di `.env` Next.js:
 AI_SERVICE_URL=http://localhost:8000/api/v1
 ```
 
-Contoh pemanggilan dari Next.js Route Handler:
 ```typescript
 // Embed roti baru setelah INSERT ke DB
 await fetch(`${process.env.AI_SERVICE_URL}/embed/bread`, {
@@ -264,13 +354,37 @@ await fetch(`${process.env.AI_SERVICE_URL}/embed/bread`, {
   }),
 });
 
-// Ambil rekomendasi di halaman detail roti
+// Rekomendasi di halaman detail roti
 const res = await fetch(`${process.env.AI_SERVICE_URL}/recommend/`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ bread_id: id, top_k: 4 }),
-  next: { revalidate: 300 }, // cache 5 menit
+  next: { revalidate: 300 },
 });
+
+// Chatbot — kelola history di state frontend
+const [history, setHistory] = useState([]);
+
+async function sendMessage(userMessage: string) {
+  const res = await fetch(`${process.env.AI_SERVICE_URL}/chat/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: userMessage,
+      history: history,
+      top_k_context: 3,
+      min_similarity: 0.3,
+    }),
+  });
+
+  const data = await res.json();
+
+  setHistory(prev => [
+    ...prev,
+    { role: "user", content: userMessage },
+    { role: "assistant", content: data.reply },
+  ]);
+}
 ```
 
 ---
@@ -288,6 +402,7 @@ const res = await fetch(`${process.env.AI_SERVICE_URL}/recommend/`, {
 
 ## Catatan
 
-- Microservice ini **tidak mengelola DDL** (CREATE TABLE, ALTER TABLE) — semua schema dikelola Prisma dari Next.js, kecuali kolom `embedding` yang ditambah manual via `migrations.sql`.
-- Model embedding di-load sekali saat startup dan di-share ke semua request via `app.state.embedding_model`.
+- Microservice ini **tidak mengelola DDL** — semua schema dikelola Prisma dari Next.js, kecuali kolom `embedding` yang ditambah manual via `migrations.sql`.
+- Embedding model dan LLM di-load sekali saat startup dan di-share ke semua request via `app.state`.
 - pgvector menggunakan **HNSW index** untuk cosine similarity search yang efisien.
+- RAG chatbot menggunakan `min_similarity: 0.3` (lebih rendah dari recommend `0.5`) agar konteks yang diambil lebih luas untuk percakapan natural.

@@ -2,6 +2,7 @@ from sentence_transformers import SentenceTransformer
 from typing import List,Optional
 import numpy as np
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 

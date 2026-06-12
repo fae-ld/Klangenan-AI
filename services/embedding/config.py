@@ -41,6 +41,20 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+    
+    # ------------------------------------------------------------------
+    # LLM Provider
+    # ------------------------------------------------------------------
+    # Pilihan: "gemini" | "ollama"
+    LLM_PROVIDER: str = "gemini"
+    
+    # Gemini
+    GEMINI_API_KEY: str = ""
+    MODEL_NAME: str = ""
+ 
+    # Ollama (hanya dipakai kalau LLM_PROVIDER=ollama)
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "qwen2.5:7b"
  
     model_config = SettingsConfigDict(
         env_file=root / ".env",  # Mundur 2 kali untuk ke root directory

@@ -66,7 +66,6 @@ class BreadRepository:
         
         # Embed vector langsung sebagai literal SQL string — hindari masalah parameter casting
         vector_literal = f"'[{','.join(str(x) for x in source_embedding)}]'::vector"
-        print(f"Vector literal for SQL: {vector_literal}")  # Debug: pastikan format benar
         
         exclude_ids = list(set(exclude_ids)) if exclude_ids else [-1]
         exclude_str = ",".join(str(i) for i in exclude_ids)
